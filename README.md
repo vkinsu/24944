@@ -1,4 +1,4 @@
-# 24940
+# 24944
 
 
 # Первый этап
@@ -61,7 +61,7 @@
 2. git add <Путь к вашей папке> добавление в репозиторий
 3. git commit -m "<Что-то написать>" сделать коммит
 4. git push для загрузки на github
-# 24940
+# 24944
 
 
 #…or create a new repository on the command line
@@ -76,4 +76,3 @@
 1. git remote add origin git@github.com:vkinsu/24940.git
 2. git branch -M main
 3. git push -u origin main
-
