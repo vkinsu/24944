@@ -32,15 +32,11 @@ void print_process_ids() {
 }
 
 int main(int argc, char *argv[]) {
-    int opt;
-    
     printf("Processing options from right to left...\n\n");
-    
-    // Альтернативная обработка опций (простая версия для Linux)
+
     for (int i = argc - 1; i > 0; i--) {
         if (argv[i][0] == '-' && argv[i][1] != '\0') {
             char option = argv[i][1];
-            
             switch (option) {
                 case 'i':
                     print_user_ids();
@@ -57,6 +53,6 @@ int main(int argc, char *argv[]) {
             }
         }
     }
-    
+
     return 0;
 }
