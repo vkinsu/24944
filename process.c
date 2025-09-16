@@ -10,7 +10,7 @@
 
 extern char **environ;
 
-// ==== helpers ====
+/* ===== helpers ===== */
 static void print_user_ids(void){
     printf("=== User and Group IDs ===\n");
     printf("Real UID: %d\n", getuid());
@@ -76,26 +76,27 @@ static void set_env_kv(const char *kv){
     free(dup);
 }
 
-// ==== main: manual right-to-left parser with clusters and args ====
+/* получить inline-аргумент внутри кластера (-U123) */
+static const char* get_inline_val(const char *token, int k){
+    return (token[k+1] != '\0') ? &token[k+1] : NULL;
+}
+/* получить следующий токен как аргумент (-U 123) */
+static const char* get_next_val(int argc, char *argv[], int i){
+    if (i+1 < argc && argv[i+1][0] != '-') return argv[i+1];
+    return NULL;
+}
+
+/* ===== main: manual right-to-left with clusters ===== */
 int main(int argc, char *argv[]){
     printf("Processing options from right to left...\n\n");
 
     for (int i = argc - 1; i > 0; --i){
         const char *arg = argv[i];
-        if (arg[0] != '-' || arg[1] == '\0') continue; // not an option
+        if (arg[0] != '-' || arg[1] == '\0') continue; /* not an option */
 
-        // iterate over a cluster: e.g. "-ipd"
+        /* перебор кластера, например "-ipd" */
         for (int k = 1; arg[k] != '\0'; ++k){
             char opt = arg[k];
-
-            // helpers to fetch argument for options that require one
-            auto get_inline = [&](void)->const char* {
-                return (arg[k+1] != '\0') ? &arg[k+1] : NULL; // rest of this token
-            };
-            auto get_next = [&](void)->const char* {
-                if (i+1 < argc && argv[i+1][0] != '-') return argv[i+1];
-                return NULL;
-            };
 
             switch (opt){
                 case 'i': print_user_ids(); break;
@@ -107,25 +108,24 @@ int main(int argc, char *argv[]){
                 case 'v': print_env_all(); break;
 
                 case 'U': {
-                    const char *val = get_inline();
-                    if (!val) val = get_next();
+                    const char *val = get_inline_val(arg,k);
+                    if (!val) val = get_next_val(argc,argv,i);
                     if (!val){ fprintf(stderr,"-U requires bytes\n"); break; }
                     set_rlimit_val(RLIMIT_FSIZE, "ULIMIT", val);
-                    // if inline was used, stop processing the rest of this token
-                    if (arg[k+1] != '\0') k = (int)strlen(arg)-1;
+                    if (arg[k+1] != '\0') k = (int)strlen(arg)-1; /* съели остаток токена */
                 } break;
 
                 case 'C': {
-                    const char *val = get_inline();
-                    if (!val) val = get_next();
+                    const char *val = get_inline_val(arg,k);
+                    if (!val) val = get_next_val(argc,argv,i);
                     if (!val){ fprintf(stderr,"-C requires bytes\n"); break; }
                     set_rlimit_val(RLIMIT_CORE, "CORE", val);
                     if (arg[k+1] != '\0') k = (int)strlen(arg)-1;
                 } break;
 
                 case 'V': {
-                    const char *kv = get_inline();
-                    if (!kv) kv = get_next();
+                    const char *kv = get_inline_val(arg,k);
+                    if (!kv) kv = get_next_val(argc,argv,i);
                     if (!kv){ fprintf(stderr,"-V requires name=value\n"); break; }
                     set_env_kv(kv);
                     if (arg[k+1] != '\0') k = (int)strlen(arg)-1;
@@ -135,8 +135,6 @@ int main(int argc, char *argv[]){
                     printf("Unknown option: -%c\n", opt);
                     break;
             }
-
-            // если это была опция с аргументом в остатке токена, мы уже выставили k на конец токена
         }
     }
     return 0;
