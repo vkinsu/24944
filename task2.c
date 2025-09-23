@@ -1,30 +1,24 @@
-#include <sys/types.h>
+
+
 #include <stdio.h>
 #include <time.h>
-#include <stdlib.h>
 
-extern char *tzname[];
+int main(void) {
+    time_t now = time(NULL);          // текущее время в секундах с 1970-01-01 UTC
+    time_t pst = now - 8 * 3600;      // сдвиг на -8 часов (PST = UTC-8)
 
-int main(void)
-{
-    time_t now;
-    struct tm *sp;
+    // Вывод как готовая строка
+    printf("Калифорния (PST): %s", ctime(&pst));
 
-    // Устанавливаем временную зону в Калифорнию (Pacific Time)
-    setenv("TZ", "PST8PDT", 1);
-    tzset();
-
-    (void) time(&now);
-
-    printf("Время (PST/PDT): %s", ctime(&now));
-
-    sp = localtime(&now);
-    printf("%d/%d/%02d %d:%02d %s\n",
-        sp->tm_mon + 1, sp->tm_mday,
-        sp->tm_year + 1900,  // поправка: tm_year считает от 1900
-        sp->tm_hour,
-        sp->tm_min,
-        tzname[sp->tm_isdst]);
-
-    exit(0);
+    // Разложим и выведем вручную (MM/DD/YYYY HH:MM)
+    struct tm *tm_pst = gmtime(&pst); // gmtime, потому что мы уже сдвинули на -8
+    if (tm_pst) {
+        printf("%02d/%02d/%04d %02d:%02d PST\n",
+               tm_pst->tm_mon + 1,
+               tm_pst->tm_mday,
+               tm_pst->tm_year + 1900,
+               tm_pst->tm_hour,
+               tm_pst->tm_min);
+    }
+    return 0;
 }
