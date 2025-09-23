@@ -1,5 +1,14 @@
 # 24944
 
+Подключение к Solaris
+https://github.com/vkinsu/
+ssh username@ccfit.nsu.ru
+ssh-keygen -t rsa
+cp .ssh/id_rsa.pub .ssh/authorized_keys
+ssh 10.4.0.68
+cat .ssh/id_rsa.pub
+
+
 
 # Первый этап
 
