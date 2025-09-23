@@ -4,11 +4,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>   // <-- добавь это
 #include <unistd.h>
 #include <sys/resource.h>
 #include <sys/types.h>
 #include <errno.h>
 #include <limits.h>
+
 
 extern char **environ;
 
