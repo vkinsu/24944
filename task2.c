@@ -1,24 +1,24 @@
-
-
 #include <stdio.h>
 #include <time.h>
+#include <stdlib.h>
 
 int main(void) {
-    time_t now = time(NULL);          // текущее время в секундах с 1970-01-01 UTC
-    time_t pst = now - 8 * 3600;      // сдвиг на -8 часов (PST = UTC-8)
+    time_t now = time(NULL);
 
-    // Вывод как готовая строка
-    printf("Калифорния (PST): %s", ctime(&pst));
+    // Устанавливаем временную зону Калифорнии (Лос-Анджелес)
+    setenv("TZ", "America/Los_Angeles", 1);
+    tzset();
 
-    // Разложим и выведем вручную (MM/DD/YYYY HH:MM)
-    struct tm *tm_pst = gmtime(&pst); // gmtime, потому что мы уже сдвинули на -8
-    if (tm_pst) {
-        printf("%02d/%02d/%04d %02d:%02d PST\n",
-               tm_pst->tm_mon + 1,
-               tm_pst->tm_mday,
-               tm_pst->tm_year + 1900,
-               tm_pst->tm_hour,
-               tm_pst->tm_min);
-    }
+    // Вывод времени в Калифорнии
+    printf("Калифорния: %s", ctime(&now));
+
+    struct tm *tm_cal = localtime(&now);
+    printf("%02d/%02d/%04d %02d:%02d\n",
+           tm_cal->tm_mon + 1,
+           tm_cal->tm_mday,
+           tm_cal->tm_year + 1900,
+           tm_cal->tm_hour,
+           tm_cal->tm_min);
+
     return 0;
 }
