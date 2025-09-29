@@ -34,28 +34,34 @@ int main()
     pos_str[count_str] = read_bites;
 
     signal(SIGALRM, timeout_handler);
-    alarm(5);
 
-    printf("Введите номер строки (1-%d): ", count_str);
-
-    int n;
-    int result = scanf("%d", &n);
-    
-    if (result == 1)
+    while(1)
     {
-        alarm(0);
+        alarm(5);
 
-        lseek(st, pos_str[n-1], SEEK_SET);
+        printf("Введите номер строки (1-%d): ", count_str);
 
-        int index = pos_str[n] - pos_str[n-1];
-        char output[index];
-        read(st, output, index);
+        int n;
+        int result = scanf("%d", &n);
+        
+        if (n == 0) { break; }
 
-        for (int i = 0; i < index; i++) { printf("%c", output[i]); }
-    }
-    else
-    {
-        for (int i = 0; i < read_bites; i++) { printf("%c", buffer[i]); }
+        if (result == 1)
+        {
+            alarm(0);
+
+            lseek(st, pos_str[n-1], SEEK_SET);
+
+            int index = pos_str[n] - pos_str[n-1];
+            char output[index];
+            read(st, output, index);
+
+            for (int i = 0; i < index; i++) { printf("%c", output[i]); }
+        }
+        else
+        {
+            for (int i = 0; i < read_bites; i++) { printf("%c", buffer[i]); }
+        }
     }
 
     close(st);
