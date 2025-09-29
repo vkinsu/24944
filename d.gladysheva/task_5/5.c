@@ -26,15 +26,21 @@ int main()
 
     pos_str[count_str] = read_bites;
 
-    int n;
-    scanf("%d", &n);
-    lseek(st, pos_str[n-1], SEEK_SET);
+    while(1)
+    {
+        int n;
+        scanf("%d", &n);
 
-    int index = pos_str[n] - pos_str[n-1];
-    char output[index];
-    read(st, output, index);
+        if (n == 0) { break; }
 
-    for (int i = 0; i < index; i++) { printf("%c", output[i]); }
+        lseek(st, pos_str[n-1], 0);
+
+        int index = pos_str[n] - pos_str[n-1];
+        char output[index];
+        read(st, output, index);
+
+        for (int i = 0; i < index; i++) { printf("%c", output[i]); }
+    }
 
     close(st);
 
