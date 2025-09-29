@@ -2,8 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-//подредачить текст и проверить для сдачи
-
 typedef struct Node
 {
     char *str;
@@ -62,4 +60,5 @@ int main()
     }
 
     return 0;
+
 }
