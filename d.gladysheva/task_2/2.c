@@ -11,7 +11,7 @@ int main()
 
     (void) time( &now );
 
-    setenv("TZ", "PST8PDT", 1);  //перейти на тихоокеанское время (летнее)
+    setenv("TZ", "PST8", 1);  //перейти на тихоокеанское время (летнее)
     tzset(); //применить 
 
     printf("%s", ctime( &now ) );
@@ -24,4 +24,5 @@ int main()
     exit(0);
 
     return 0;
+
 }
