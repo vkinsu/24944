@@ -26,8 +26,24 @@ int main()
 
     pos_str[count_str] = read_bites;
 
+    printf("== Таблица соответствия строки и номера ==\n");
+    for (int j = 0; j < count_str; j++)
+    {
+        printf("%d -> ", j+1);
+
+        lseek(st, pos_str[j], 0);
+
+        int index = pos_str[j+1] - pos_str[j];
+        char output[index];
+        read(st, output, index);
+
+        for (int i = 0; i < index; i++) { printf("%c", output[i]); }
+        printf("\n");
+    }
+
     while(1)
     {
+        printf("Введите номер строки (1-%d): ", count_str);
         int n;
         scanf("%d", &n);
 
