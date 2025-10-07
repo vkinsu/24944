@@ -13,7 +13,7 @@ int main()
 {
     print_uidf();
 
-    FILE* st = fopen("my_secret_file.txt", "r");
+    FILE* st = fopen("secret_file", "r");
     
     if (st == NULL) { perror("File opening error"); }
     else { printf("Succes\n"); }
@@ -22,7 +22,7 @@ int main()
     if (setuid(getuid()) == -1) { perror("setuid failed"); }
     print_uidf();
 
-    FILE* fn = fopen("my_secret_file.txt", "r");
+    FILE* fn = fopen("secret_file", "r");
 
     if (fn == NULL) { perror("File opening error"); }
     else { printf("Succes\n"); }

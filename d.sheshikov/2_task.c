@@ -5,17 +5,17 @@
 int main() {
     time_t rawtime;
     struct tm *timeinfo;
-    char buffer[80];
     
-    setenv("TZ", "PST8PDT", 1);
+    setenv("TZ", "America/Los_Angeles", 1);
     tzset();
     
     time(&rawtime);
     timeinfo = localtime(&rawtime);
+    
+    printf("%d/%d/%02d %d:%02d PST\n",
+        timeinfo->tm_mon + 1, timeinfo->tm_mday,
+        timeinfo->tm_year +1900, timeinfo->tm_hour - 1,
+        timeinfo->tm_min);
 
-    
-    strftime(buffer, sizeof(buffer), "Текущее время в Калифорнии (PST): %Y-%m-%d %H:%M:%S %Z", timeinfo);
-    printf("%s\n", buffer);
-    
     return 0;
 }

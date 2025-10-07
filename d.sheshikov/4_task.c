@@ -4,7 +4,6 @@
 
 #define BUFFER_SIZE 256
 
-
 struct Node {
     char *str;
     struct Node *next;
@@ -18,6 +17,7 @@ int main() {
 
     
     while (1) {
+        memset(buffer, 0, BUFFER_SIZE);
 
         if (fgets(buffer, BUFFER_SIZE, stdin) == NULL) {
             break;
