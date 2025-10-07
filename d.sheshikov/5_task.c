@@ -58,7 +58,7 @@ void main() {
 
     printf("№\tОтступ\tДлина\n");
     for (int i = 0; i < line_count; i++) {
-        printf("%d\t%ld\t%d\n", table[i].idx + 1, table[i].offset, table[i].length);
+        printf("%d\t%ld\t%d\n", table[i].idx, table[i].offset, table[i].length);
     }
 
     int line_number;
