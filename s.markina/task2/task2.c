@@ -11,7 +11,7 @@ int main(){
 	(void)time(&now);
 
 	// Устанавливаем часовой пояс для Калифорнии и принимаем изменения
-    setenv("TZ", "PST8PDT", 1);
+    setenv("TZ", "PST8", 1);
     tzset(); 
 
 	printf("%s", ctime(&now));

@@ -107,6 +107,19 @@ int main() {
             break;
         }
 
+        if (result != 1) {
+            // Ошибка ввода или конец файла
+            if (result == EOF) {
+                printf("\nКонец ввода.\n");
+            } else {
+                printf("Некорректный ввод. Пожалуйста, введите число.\n");
+                // Очищаем буфер ввода
+                int c;
+                while ((c = getchar()) != '\n' && c != EOF);
+            }
+            continue;
+        }
+
         if (n == 0) { 
             break; 
         }
