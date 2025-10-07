@@ -2,11 +2,12 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <signal.h>
 
-volatile bool timeout = false;
+volatile int timeout = 0;
 
 void timeout_handler(int sig) { 
-    timeout = true; 
+    timeout = 1; 
 }
 
 // Структура для хранения информации о строке
@@ -17,8 +18,8 @@ struct LineInfo {
 };
 
 // Функция для вывода всего содержимого файла
-void print_entire_file() {
-    printf("Время истекло! Содержимое файла:\n");
+void print_entire_file(int fd, struct LineInfo* lines, int countl) {
+    printf("\nВремя истекло! Содержимое файла:\n");
     printf("==================================\n");
     for (int i = 0; i < countl; i++) {
         lseek(fd, lines[i].start_offset, SEEK_SET);
@@ -84,6 +85,7 @@ int main() {
         free(output);
     }
 
+    // Устанавливаем обработчик сигнала
     signal(SIGALRM, timeout_handler);
 
     // Основной цикл запросов
@@ -91,11 +93,11 @@ int main() {
         printf("Введите номер строки (1-%d, 0 для выхода): ", countl);
         fflush(stdout);  // Сбрасываем буфер вывода
 
-        timeout = false;
+        timeout = 0;
         alarm(5);  // Запускаем таймер на 5 секунд
 
         int n;
-        scanf("%d", &n);
+        int result = scanf("%d", &n);
 
         alarm(0);  // Отменяем таймер после ввода
 
@@ -105,14 +107,15 @@ int main() {
             break;
         }
 
-        if (n == 0) { break; }
+        if (n == 0) { 
+            break; 
+        }
 
         if (n < 1 || n > countl) {
             printf("Некорректный номер строки. Допустимый диапазон: 1-%d\n", countl);
             continue;
         }
 
-        
         // Получаем информацию о запрошенной строке
         struct LineInfo line = lines[n - 1];
         lseek(fd, line.start_offset, SEEK_SET);
@@ -123,11 +126,11 @@ int main() {
         read(fd, output, line_length);
         output[line_length] = '\0';
         printf("Строка %d: %s\n", n, output);
-
+        free(output);
     }
 
     // Освобождение ресурсов
-
+    free(lines);
     close(fd);
 
     return 0;
