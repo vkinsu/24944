@@ -1,24 +1,40 @@
 #include <stdio.h>
-#include <time.h>
 #include <stdlib.h>
+#include <time.h>
 
-int main(void) {
+int main(void)
+{
     time_t now = time(NULL);
+    if (now == (time_t)-1) {
+        perror("time");
+        return 1;
+    }
 
-    // Устанавливаем временную зону Калифорнии (Лос-Анджелес)
-    setenv("TZ", "America/Los_Angeles", 1);
+    /* Устанавливаем часовой пояс и применяем его */
+    if (setenv("TZ", "PST8PDT", 1) == -1) {
+        perror("setenv");
+        return 1;
+    }
     tzset();
 
-    // Вывод времени в Калифорнии
-    printf("Калифорния: %s", ctime(&now));
+    /* Печать времени в текстовом формате ctime (включает '\n') */
+    printf("%s", ctime(&now));
 
-    struct tm *tm_cal = localtime(&now);
-    printf("%02d/%02d/%04d %02d:%02d\n",
-           tm_cal->tm_mon + 1,
-           tm_cal->tm_mday,
-           tm_cal->tm_year + 1900,
-           tm_cal->tm_hour,
-           tm_cal->tm_min);
+    /* Локальное время с разбивкой по полям */
+    struct tm *sp = localtime(&now);
+    if (!sp) {
+        perror("localtime");
+        return 1;
+    }
+
+    /* tm_year — годы с 1900, tm_mon — месяцы 0..11 */
+    printf("%02d/%02d/%04d %02d:%02d %s\n",
+           sp->tm_mon + 1,
+           sp->tm_mday,
+           sp->tm_year + 1900,
+           sp->tm_hour,
+           sp->tm_min,
+           tzname[sp->tm_isdst ? 1 : 0]);
 
     return 0;
 }
