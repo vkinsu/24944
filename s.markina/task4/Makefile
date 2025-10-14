@@ -1,0 +1,1 @@
+gcc task4.c -o task

@@ -5,7 +5,7 @@
 #include <signal.h>
 
 volatile int timeout = 0;
-
+int flag = 1;
 void timeout_handler(int sig) { 
     timeout = 1; 
 }
@@ -95,13 +95,12 @@ int main() {
 
         timeout = 0;
         alarm(5);  // Запускаем таймер на 5 секунд
-
+        if(flag == 0) { alarm(0); }
         int n;
         int result = scanf("%d", &n);
-
         alarm(0);  // Отменяем таймер после ввода
 
-        if (timeout) {
+        if (timeout & flag) {
             // Время истекло
             print_entire_file(fd, lines, countl);
             break;
@@ -116,6 +115,7 @@ int main() {
                 // Очищаем буфер ввода
                 int c;
                 while ((c = getchar()) != '\n' && c != EOF);
+                flag = 0;
             }
             continue;
         }
@@ -126,6 +126,7 @@ int main() {
 
         if (n < 1 || n > countl) {
             printf("Некорректный номер строки. Допустимый диапазон: 1-%d\n", countl);
+            flag = 0;
             continue;
         }
 
@@ -139,6 +140,7 @@ int main() {
         read(fd, output, line_length);
         output[line_length] = '\0';
         printf("Строка %d: %s\n", n, output);
+        flag = 0;
         free(output);
     }
 
