@@ -24,7 +24,7 @@ int main()
     }
 
     print_ids();
-    FILE *file = fopen("x_txt", "r");
+    file = fopen("x_txt", "r");
     if(file == NULL){
         perror("Невозможно открыть файл");
     }
