@@ -57,7 +57,7 @@ int main(int argc, char *argv[]) {
             case 'u':
                 uflg++;
                 printf("=== Option -u ===\n");
-                if (getrlimit(RLIMIT_FSIZE, &rlp) == 0) {  
+                if (getrlimit(RLIMIT_NPROC, &rlp) == 0) {  
                     printf("File size limit (ulimit):\n");
                     printf("  Soft limit: %ld\n", rlp.rlim_cur);
                     printf("  Hard limit: %ld\n", rlp.rlim_max);
