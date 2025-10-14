@@ -11,7 +11,7 @@ void print_ids(){
 int main()
 {
     print_ids();
-    FILE *file = fopen("x_txt", "r");
+    FILE *file = fopen("x.txt", "r");
     if(file == NULL){
         perror("Невозможно открыть файл");
     }
@@ -24,7 +24,7 @@ int main()
     }
 
     print_ids();
-    file = fopen("x_txt", "r");
+    file = fopen("x.txt", "r");
     if(file == NULL){
         perror("Невозможно открыть файл");
     }
