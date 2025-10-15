@@ -1,18 +1,12 @@
 /* ===========================================================
- * task6_once_timeout.c — Таблица строк + таймаут только на ПЕРВЫЙ ввод
- * Сборка: gcc -std=c11 -Wall -Wextra -O2 task6_once_timeout.c -o task6
- * Запуск: ./task6 path/to/file.txt
- *
- * Поведение:
- * 1) Строит индекс строк (offset,len) с использованием open/read/lseek/close.
- * 2) На ПЕРВЫЙ запрос номера строки действует лимит 5 секунд.
- *    - Если пользователь не успел — печатается ВЕСЬ файл и программа завершает работу.
- * 3) После первого УСПЕШНОГО ввода ограничения по времени больше НЕТ.
+ * task6.c — Таблица строк + печать таблицы + таймаут 5с на ПЕРВЫЙ ввод
+ * Сборка: gcc -std=c11 -Wall -Wextra -O2 task6.c -o task6
  * =========================================================== */
 #define _XOPEN_SOURCE 700
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,7 +14,6 @@
 #include <string.h>
 #include <limits.h>
 
-/* ---------- Индекс строк ---------- */
 typedef struct { off_t offset; size_t len; } line_rec_t;
 typedef struct { line_rec_t *data; size_t size, cap; } lines_t;
 
@@ -56,60 +49,26 @@ static void build_index(int fd, lines_t *ls){
                 lines_push(ls, line_start, line_len);
                 line_start = file_pos + i + 1;
                 line_len = 0;
-            }else{
-                line_len++;
-            }
+            }else line_len++;
         }
         file_pos += r;
-
-        if(lseek(fd, 0L, SEEK_CUR)==(off_t)-1){ perror("lseek(SEEK_CUR)"); free(buf); exit(1); }
     }
     if(r<0){ perror("read"); free(buf); exit(1); }
 
-    if((size_t)(file_pos - line_start) == line_len){
-        if(line_len>0 || ls->size==0 ||
-           (ls->size>0 && ls->data[ls->size-1].offset!=line_start)){
-            lines_push(ls, line_start, line_len);
-        }
+    if(line_start < file_pos){
+        lines_push(ls, line_start, (size_t)(file_pos - line_start));
     }
     free(buf);
-
     if(lseek(fd, 0L, SEEK_SET)==(off_t)-1){ perror("lseek"); exit(1); }
 }
 
-/* ---------- Печать строки ---------- */
-static int print_line(int fd, const lines_t *ls, size_t lineno){
-    if(lineno==0 || lineno>ls->size) return -1;
-    line_rec_t rec = ls->data[lineno-1];
-
-    if(lseek(fd, rec.offset, SEEK_SET)==(off_t)-1){ perror("lseek"); return -1; }
-
-    if(rec.len==0){
-        if(write(STDOUT_FILENO, "\n", 1)<0) perror("write");
-        return 0;
-    }
-
-    char *buf=(char*)malloc(rec.len);
-    if(!buf){ perror("malloc"); return -1; }
-
-    size_t left=rec.len; char *p=buf;
-    while(left>0){
-        ssize_t got = read(fd, p, left);
-        if(got<0){
-            if(errno==EINTR) continue;
-            perror("read"); free(buf); return -1;
-        }
-        if(got==0) break;
-        left -= (size_t)got; p += got;
-    }
-
-    if(write(STDOUT_FILENO, buf, rec.len)<0) perror("write");
-    if(write(STDOUT_FILENO, "\n", 1)<0) perror("write");
-    free(buf);
-    return 0;
+static void print_table(const lines_t *ls){
+    printf("Таблица строк (всего %zu):\n", ls->size);
+    printf("%-6s %-12s %-8s\n", "№", "offset", "len");
+    for(size_t i=0;i<ls->size;++i)
+        printf("%-6zu %-12lld %-8zu\n", i+1, (long long)ls->data[i].offset, ls->data[i].len);
 }
 
-/* ---------- Печать файла целиком и выход ---------- */
 static void print_whole_and_exit(int fd){
     if(lseek(fd, 0L, SEEK_SET)==(off_t)-1){ perror("lseek"); }
     char buf[1<<15];
@@ -118,10 +77,7 @@ static void print_whole_and_exit(int fd){
         ssize_t off=0;
         while(off<r){
             ssize_t w = write(STDOUT_FILENO, buf+off, r-off);
-            if(w<0){
-                if(errno==EINTR) continue;
-                perror("write"); break;
-            }
+            if(w<0){ if(errno==EINTR) continue; perror("write"); break; }
             off += w;
         }
     }
@@ -129,90 +85,71 @@ static void print_whole_and_exit(int fd){
     _exit(0);
 }
 
-/* ---------- Ввод числа с опциональным таймаутом ---------- */
 static volatile sig_atomic_t g_timed_out=0;
 static void on_alarm(int sig){ (void)sig; g_timed_out=1; }
 
-/* timeout_sec > 0  -> ограничение времени (alarm)
- * timeout_sec == 0 -> БЕЗ ограничения по времени */
 static int read_number_with_optional_timeout(unsigned long long *out, unsigned timeout_sec){
-    g_timed_out = 0;
+    g_timed_out=0;
     if(timeout_sec>0) alarm(timeout_sec);
-
     char line[256];
     if(!fgets(line, sizeof(line), stdin)){
-        if(timeout_sec>0 && g_timed_out) return 0; /* таймаут/EOF */
-        return 0; /* EOF/ошибка */
+        if(timeout_sec>0 && g_timed_out) return 0;
+        return 0;
     }
     if(timeout_sec>0) alarm(0);
-
     char *end=NULL;
     errno=0;
     unsigned long long val = strtoull(line, &end, 10);
     if(errno==ERANGE) return -1;
     while(end && (*end==' '||*end=='\t'||*end=='\n'||*end=='\r')) end++;
     if(end && *end!='\0') return -1;
-
     *out = val;
     return 1;
 }
 
 int main(int argc, char **argv){
-    if(argc!=2){
-        fprintf(stderr,"Использование: %s <file>\n", argv[0]);
-        return 1;
-    }
+    if(argc!=2){ fprintf(stderr,"Использование: %s <file>\n", argv[0]); return 1; }
     int fd = open(argv[1], O_RDONLY);
     if(fd<0){ perror("open"); return 1; }
 
-    /* Обработчик SIGALRM (нужен только для ПЕРВОГО ввода) */
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = on_alarm;
+    struct sigaction sa={0};
+    sa.sa_handler=on_alarm;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    if(sigaction(SIGALRM, &sa, NULL)<0){ perror("sigaction"); close(fd); return 1; }
+    if(sigaction(SIGALRM,&sa,NULL)<0){ perror("sigaction"); close(fd); return 1; }
 
     lines_t ls; build_index(fd, &ls);
+    print_table(&ls);
 
-    int first_prompt = 1; /* на первый запрос — таймаут 5с */
+    int first_prompt=1;
     while(1){
-        if(first_prompt){
-            printf("Введите номер строки (1..%zu, 0 — выход) [5 секунд]: ", ls.size);
-        }else{
-            printf("Введите номер строки (1..%zu, 0 — выход): ", ls.size);
-        }
+        printf("Введите номер строки (1..%zu, 0 — выход)%s: ",
+               ls.size, first_prompt?" [5 секунд]":"");
         fflush(stdout);
 
-        unsigned long long num=0ULL;
-        int rc = read_number_with_optional_timeout(&num, first_prompt ? 5u : 0u);
+        unsigned long long num=0;
+        int rc=read_number_with_optional_timeout(&num, first_prompt?5u:0u);
 
         if(first_prompt && rc==0){
-            /* Только на ПЕРВЫЙ ввод: таймаут -> печатаем весь файл и выходим */
             printf("\nТаймаут/EOF. Печатаю весь файл и выхожу:\n");
             print_whole_and_exit(fd);
         }
-        if(rc<0){
-            fprintf(stderr,"Некорректный ввод. Повторите.\n");
-            continue;
-        }
-        if(rc==0){
-            /* EOF без таймаута на последующих вводах — завершимся по соглашению */
-            printf("\nEOF. Завершение.\n");
-            break;
-        }
+        if(first_prompt) first_prompt=0;
 
-        /* После первого успешного чтения числа — больше нет таймера */
-        if(first_prompt) first_prompt = 0;
-
+        if(rc<0){ fprintf(stderr,"Некорректный ввод.\n"); continue; }
+        if(rc==0){ printf("\nEOF. Завершение.\n"); break; }
         if(num==0ULL) break;
         if(num<1ULL || num>(unsigned long long)ls.size){
-            fprintf(stderr,"Нет такой строки. Диапазон: 1..%zu\n", ls.size);
-            continue;
+            fprintf(stderr,"Нет такой строки.\n"); continue;
         }
-        if(print_line(fd, &ls, (size_t)num)!=0){
-            fprintf(stderr,"Ошибка печати строки %llu\n", num);
-        }
+
+        line_rec_t rec=ls.data[num-1];
+        if(lseek(fd, rec.offset, SEEK_SET)==(off_t)-1){ perror("lseek"); continue; }
+        char *buf=malloc(rec.len);
+        if(!buf){ perror("malloc"); continue; }
+        read(fd, buf, rec.len);
+        write(STDOUT_FILENO, buf, rec.len);
+        write(STDOUT_FILENO, "\n", 1);
+        free(buf);
     }
 
     lines_free(&ls);
