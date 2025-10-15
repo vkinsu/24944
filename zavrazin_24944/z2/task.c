@@ -4,20 +4,26 @@
 
 extern char *tzname[];
 
-int main() {
+int main(void) {
     time_t now;
     struct tm *sp;
 
-    putenv("TZ=America/Los_Angeles");
+    putenv("TZ=PST8");
+    tzset();
 
     now = time(NULL);
-    printf("%s", ctime(&now));
+
+    printf("Текущее время в UTC: %s", asctime(gmtime(&now)));
 
     sp = localtime(&now);
-    printf("%d/%d/%02d %d:%02d %s\n",
-           sp->tm_mon + 1, sp->tm_mday,
-           sp->tm_year - 100, sp->tm_hour,
-           sp->tm_min, tzname[sp->tm_isdst]);
+    printf("Время в Калифорнии (PST): %02d/%02d/%04d %02d:%02d:%02d %s\n",
+           sp->tm_mon + 1,
+           sp->tm_mday,
+           sp->tm_year + 1900,
+           sp->tm_hour,
+           sp->tm_min,
+           sp->tm_sec,
+           tzname[sp->tm_isdst]);
 
     return 0;
 }

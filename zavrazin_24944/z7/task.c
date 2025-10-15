@@ -1,121 +1,98 @@
-#include <stdlib.h>
-#include <fcntl.h>
 #include <stdio.h>
-#include <sys/select.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <signal.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 
-typedef struct {
-    off_t offset;
-    off_t length;
-} Line;
+#define MAX_LINES 1024
 
-typedef struct {
-    Line *array;
-    int cnt;
-    int cap;
-} Array;
+char *file_data = NULL;
+size_t file_size = 0;
+off_t offsets[MAX_LINES];
+int lengths[MAX_LINES];
+int line_count = 0;
 
-void initArray(Array *a) {
-    a->array = malloc(sizeof(Line));
-    a->cnt = 0;
-    a->cap = 1;
-}
-
-void insertArray(Array *a, Line element) {
-    if (a->cnt == a->cap) {
-        a->cap *= 2;
-        a->array = realloc(a->array, a->cap * sizeof(Line));
-    }
-
-    a->array[a->cnt++] = element;
-}
-
-void freeArray(Array *a) {
-    free(a->array);
-    a->array = NULL;
-    a->cnt = a->cap = 0;
-}
-
-void printLine(Line line, const char *mapped) {
-    for (int i = 0; i < line.length; i++) {
-        printf("%c", mapped[line.offset + i]);
-    }
+void timeout_handler(int signum) {
     printf("\n");
+    for (int i = 0; i < line_count; i++) {
+        fwrite(file_data + offsets[i], 1, lengths[i], stdout);
+        if (file_data[offsets[i] + lengths[i] - 1] != '\n') printf("\n");
+    }
+    exit(0);
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 2) { return 1; }
-    char *path = argv[1];
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <filename>\n", argv[0]);
+        return 1;
+    }
 
-    Array table;
-    initArray(&table);
+    const char *filename = argv[1];
+    int fd = open(filename, O_RDONLY);
+    if (fd == -1) {
+        perror("Failed to open file");
+        return 1;
+    }
 
-    int fd = open(path, O_RDONLY);
-    if (fd == -1) { return 1; }
+    struct stat st;
+    if (fstat(fd, &st) == -1) {
+        perror("fstat failed");
+        close(fd);
+        return 1;
+    }
+    file_size = st.st_size;
 
-    struct stat fileInfo;
-    if (fstat(fd, &fileInfo) == -1) { return 1; }
-    size_t size = fileInfo.st_size;
+    file_data = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (file_data == MAP_FAILED) {
+        perror("mmap failed");
+        close(fd);
+        return 1;
+    }
+    close(fd);
 
-    const char *mapped = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (mapped == MAP_FAILED) { return 1; }
-
-    off_t lineOffset = 0;
-    off_t lineLength = 0;
-
-    for (int i = 0; i < size; i++) {
-        char c = mapped[i];
-        if (c == '\n') {
-            Line current = {lineOffset, lineLength};
-            insertArray(&table, current);
-
-            lineOffset += lineLength + 1;
-            lineLength = 0;
-        } else {
-            lineLength++;
+    off_t line_start = 0;
+    for (size_t pos = 0; pos < file_size; pos++) {
+        if (file_data[pos] == '\n') {
+            offsets[line_count] = line_start;
+            lengths[line_count] = pos - line_start + 1;
+            line_start = pos + 1;
+            line_count++;
+            if (line_count >= MAX_LINES) break;
         }
     }
 
-    if (lineLength > 0) {
-        Line current = {lineOffset, lineLength};
-        insertArray(&table, current);
+    if (line_start < file_size && line_count < MAX_LINES) {
+        offsets[line_count] = line_start;
+        lengths[line_count] = file_size - line_start;
+        line_count++;
     }
 
-    fd_set fdset;
-    struct timeval timeout;
+    signal(SIGALRM, timeout_handler);
+
+    int n;
+    char dummy; 
 
     while (1) {
-        printf("Enter the line number: ");
+        printf("Enter line number (0 to exit): ");
         fflush(stdout);
 
-        FD_ZERO(&fdset);
-        FD_SET(0, &fdset); // STDIN_FILENO = 0
-        timeout.tv_sec = 5;
-        timeout.tv_usec = 0;
+        alarm(5);
+        if (scanf("%d", &n) != 1) break;
+        while ((dummy = getchar()) != '\n' && dummy != EOF);
+        alarm(0);
 
-        if (!select(1, &fdset, NULL, NULL, &timeout)) {
-            printf("\n\n");
-            for (int i = 0; i < table.cnt; i++)
-                printLine(table.array[i], mapped);
-            return 0;
-        }
-
-        int num;
-        scanf("%d", &num);
-
-        if (num == 0) { break; }
-        if (table.cnt < num) {
-            printf("The file contains only %d line(s).\n", table.cnt);
+        if (n == 0) break;
+        if (n < 1 || n > line_count) {
+            printf("Invalid line number\n");
             continue;
         }
 
-        Line line = table.array[num - 1];
-        printLine(line, mapped);
+        fwrite(file_data + offsets[n - 1], 1, lengths[n - 1], stdout);
+        if (file_data[offsets[n - 1] + lengths[n - 1] - 1] != '\n') printf("\n");
     }
 
-    munmap((void *) mapped, size);
-    freeArray(&table);
-
+    munmap(file_data, file_size);
     return 0;
 }

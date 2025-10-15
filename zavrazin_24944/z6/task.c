@@ -1,116 +1,100 @@
-#include <stdlib.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include <stdio.h>
-#include <sys/select.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <signal.h>
 
-typedef struct {
-    off_t offset;
-    off_t length;
-} Line;
+#define MAX_LINES 1024
+#define MAX_LINE_LEN 1024
 
-typedef struct {
-    Line *array;
-    int cnt;
-    int cap;
-} Array;
+int fd_global = -1; // Глобально для сигнала
+off_t offsets[MAX_LINES];
+int lengths[MAX_LINES];
+int line_count = 0;
 
-void initArray(Array *a) {
-    a->array = malloc(sizeof(Line));
-    a->cnt = 0;
-    a->cap = 1;
-}
+// Обработчик сигнала SIGALRM
+void timeout_handler(int signum) {
+    if (fd_global == -1) exit(1);
 
-void insertArray(Array *a, Line element) {
-    if (a->cnt == a->cap) {
-        a->cap *= 2;
-        a->array = realloc(a->array, a->cap * sizeof(Line));
+    printf("\n"); // перенос строки перед выводом файла
+    lseek(fd_global, 0, SEEK_SET);
+    char buf[MAX_LINE_LEN];
+    ssize_t n;
+    while ((n = read(fd_global, buf, sizeof(buf))) > 0) {
+        write(STDOUT_FILENO, buf, n);
     }
-
-    a->array[a->cnt++] = element;
-}
-
-void freeArray(Array *a) {
-    free(a->array);
-    a->array = NULL;
-    a->cnt = a->cap = 0;
-}
-
-void printLine(Line line, int fd) {
-    char *buf = calloc(line.length + 1, sizeof(char));
-
-    lseek(fd, line.offset, SEEK_SET);
-    read(fd, buf, line.length * sizeof(char));
-
-    printf("%s\n", buf);
-    free(buf);
+    exit(0);
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 2) { return 1; }
-    char *path = argv[1];
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <filename>\n", argv[0]);
+        return 1;
+    }
 
-    Array table;
-    initArray(&table);
+    const char *filename = argv[1];
+    int fd = open(filename, O_RDONLY);
+    if (fd == -1) {
+        perror("Failed to open file");
+        return 1;
+    }
+    fd_global = fd;
 
-    int fd = open(path, O_RDONLY);
-    if (fd == -1) { return 1; }
-    lseek(fd, 0L, SEEK_CUR);
-
-    char c;
-    off_t lineOffset = 0;
-    off_t lineLength = 0;
-    while (read(fd, &c, 1) == 1) {
-        if (c == '\n') {
-            Line current = {lineOffset, lineLength};
-            insertArray(&table, current);
-
-            lineOffset += lineLength + 1;
-            lineLength = 0;
-        } else {
-            lineLength++;
+    // Построение таблицы смещений и длин строк
+    off_t pos = 0, line_start = 0;
+    char ch;
+    while (read(fd, &ch, 1) == 1) {
+        pos++;
+        if (ch == '\n') {
+            offsets[line_count] = line_start;
+            lengths[line_count] = pos - line_start;
+            line_start = pos;
+            line_count++;
+            if (line_count >= MAX_LINES) break;
         }
     }
-
-    if (lineLength > 0) {
-        Line current = {lineOffset, lineLength};
-        insertArray(&table, current);
+    if (pos > line_start && line_count < MAX_LINES) {
+        offsets[line_count] = line_start;
+        lengths[line_count] = pos - line_start;
+        line_count++;
     }
 
-    fd_set fdset;
-    struct timeval timeout;
+    // Установка обработчика сигнала и таймера
+    signal(SIGALRM, timeout_handler);
+
+    int n;
+    char linebuf[MAX_LINE_LEN];
 
     while (1) {
-        printf("Enter the line number: ");
+        printf("Enter line number (0 to exit): ");
         fflush(stdout);
 
-        FD_ZERO(&fdset);
-        FD_SET(STDIN_FILENO, &fdset);
-        timeout.tv_sec = 5;
-        timeout.tv_usec = 0;
+        alarm(5); // 5 секунд на ввод
+        if (scanf("%d", &n) != 1) break;
+        alarm(0); // отключаем таймер, если успели ввести
 
-        if (!select(1, &fdset, NULL, NULL, &timeout)) {
-            printf("\n\n");
-            for(int i = 0; i < table.cnt; i++)
-                printLine(table.array[i], fd);
-            return 0;
-        }
+        if (n == 0) break;
 
-        int num;
-        scanf("%d", &num);
-
-        if (num == 0) { break; }
-        if (table.cnt < num) {
-            printf("The file contains only %d line(s).\n", table.cnt);
+        if (n < 1 || n > line_count) {
+            printf("Invalid line number\n");
             continue;
         }
 
-        Line line = table.array[num - 1];
-        printLine(line, fd);
+        off_t offset = offsets[n - 1];
+        int len = lengths[n - 1];
+
+        lseek(fd, offset, SEEK_SET);
+        int bytes_read = read(fd, linebuf, len);
+        if (bytes_read <= 0) {
+            perror("read");
+            continue;
+        }
+
+        linebuf[bytes_read] = '\0';
+        printf("%s", linebuf);
+        if (linebuf[bytes_read - 1] != '\n') printf("\n");
     }
 
     close(fd);
-    freeArray(&table);
-
     return 0;
 }

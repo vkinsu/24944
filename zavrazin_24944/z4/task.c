@@ -1,85 +1,97 @@
-#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <termios.h>
+#include <unistd.h>
 
-#define BUFFER_SIZE 256
-
-typedef struct Node_s {
-    char *string;
-    struct Node_s *next;
+typedef struct Node {
+    char *str;
+    struct Node *next;
 } Node;
 
-Node *head, *tail;
+void set_raw_mode(int enable) {
+    static struct termios oldt, newt;
 
-void init() {
-    head = malloc(sizeof(Node));
-
-    head->string = NULL;
-    head->next = NULL;
-
-    tail = head;
-}
-
-void push(char *string) {
-    unsigned long len = strlen(string) + 1;
-    char *copyPtr = calloc(len, sizeof(char));
-    strcpy(copyPtr, string);
-
-    tail->string = copyPtr;
-    tail->next = calloc(1, sizeof(Node));
-
-    tail = tail->next;
-}
-
-void printList() {
-    Node *ptr = head;
-    while (ptr != NULL) {
-        if (ptr->string) {
-            printf("%s\n", ptr->string);
-        }
-        ptr = ptr->next;
+    if (enable) {
+        tcgetattr(STDIN_FILENO, &oldt);
+        newt = oldt;
+        newt.c_lflag &= ~(ICANON | ECHO);
+        tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    } else {
+        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
     }
 }
 
 int main() {
-    char inputBuf[BUFFER_SIZE] = {0};
+    char buffer[1024];
+    int pos = 0;
 
-    init();
+    Node *head = NULL;
+    Node *tail = NULL;
 
-    while (fgets(inputBuf, BUFFER_SIZE, stdin) != NULL) {
-        if (inputBuf[0] == '.') {
-            printList();
-            return 0;
+    printf("Введите строки ('.' на новой строке — выход):\n");
+
+    set_raw_mode(1);
+
+    while (1) {
+        int c = getchar();
+
+        if (c == 27) {
+            getchar();
+            getchar();
+            continue;
         }
 
-        char *lineEnd = strchr(inputBuf, '\n');
-        if (lineEnd == NULL) {
-            size_t newBufCnt = 0;
-            size_t newBufCap = BUFFER_SIZE;
-            char *newBuf = malloc(BUFFER_SIZE);
+        if (c == '\n' || c == '\r') {
+            buffer[pos] = '\0';
 
-            memcpy(newBuf, inputBuf, BUFFER_SIZE);
-            newBufCnt += BUFFER_SIZE - 1;
+            if (buffer[0] == '.' && pos == 1)
+                break;
 
-            while (fgets(inputBuf, BUFFER_SIZE, stdin) != NULL) {
-                newBufCap += BUFFER_SIZE;
-                newBuf = realloc(newBuf, newBufCap);
+            if (pos > 0) {
+                char *new_str = malloc(pos + 1);
+                strcpy(new_str, buffer);
 
-                memcpy(newBuf + newBufCnt, inputBuf, BUFFER_SIZE);
-                newBufCnt += BUFFER_SIZE - 1;
+                Node *node = malloc(sizeof(Node));
+                node->str = new_str;
+                node->next = NULL;
 
-                lineEnd = strchr(newBuf, '\n');
-                if (lineEnd) {
-                    *lineEnd = '\0';
-                    push(newBuf);
-                    free(newBuf);
-                    break;
+                if (head == NULL)
+                    head = tail = node;
+                else {
+                    tail->next = node;
+                    tail = node;
                 }
             }
-        } else {
-            *lineEnd = '\0';
-            push(inputBuf);
+
+            pos = 0;
+            printf("\n");
+            continue;
         }
+
+        if (isalpha(c) || c == ' ' || c == '.') {
+            buffer[pos++] = c;
+            putchar(c); 
+            fflush(stdout);
+        }
+    }
+
+    set_raw_mode(0);
+
+    printf("\n\nРезультат:\n");
+    Node *cur = head;
+    while (cur) {
+        printf("%s\n", cur->str);
+        cur = cur->next;
+    }
+
+    cur = head;
+    while (cur) {
+        Node *tmp = cur;
+        cur = cur->next;
+        free(tmp->str);
+        free(tmp);
     }
 
     return 0;

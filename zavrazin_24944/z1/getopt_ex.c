@@ -1,145 +1,126 @@
-#include <stdio.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <unistd.h>
 #include <sys/resource.h>
+#include <sys/types.h>
 
 extern char **environ;
 
-int main(int argc, char *argv[]) {
-    char options[] = ":ispuU:cC:dvV:";  /* valid options */
+int main(int argc, char *argv[])
+{
+    char options[ ] = "ispuU:cC:dvV:";
+    extern char *optarg;
+    extern int optopt;
+    struct rlimit rlp;
+    
+    printf("argc equals %d\n", argc);
+
     int c;
-
-    while ((c = getopt(argc, argv, options)) != EOF) {
-        switch (c) {
-            // Печатает реальные и эффективные идентификаторы пользователя и группы
-            case 'i': {
-                printf("uid: %d, euid: %d, gid: %d, egid: %d\n",
-                       getuid(), geteuid(), getgid(), getegid());
+    while ((c = getopt(argc, argv, options)) != -1)
+    {
+        switch (c)
+        {
+            // -i  Печатает реальные и эффективные идентификаторы пользователя и группы.
+            case 'i':
+                printf("Real User ID = %d\n", getuid());
+                printf("Effective User ID = %d\n", geteuid());
+                printf("Real Group ID = %d\n", getgid());
+                printf("Effective Group ID = %d\n", getegid());
+                printf("\n");
                 break;
-            }
 
-                // Процесс становится лидером группы
-            case 's': {
-                if (-1 == setpgid(0, 0)) {
-                    perror("failed to set the group leader process\n");
-                } else {
-                    printf("the group leader process has been set successfully\n");
-                }
+            // -s  Процесс становится лидером группы. Подсказка: смотри setpgid(2).
+            case 's':
+                if (setpgid(0, getpid()) == 0) { printf("New PGID: %d\n", getpgid(0)); }
+                else
+                { perror("Failed to set process group"); }
                 break;
-            }
-
-                // Печатает идентификаторы процесса, процесса-родителя и группы процессов
-            case 'p': {
-                printf("pid: %d, ppid: %d, pgrp: %d\n",
-                       getpid(), getppid(), getpgrp());
+            
+            // -p  Печатает идентификаторы процесса, процесса-родителя и группы процессов.
+            case 'p':
+                printf("Process ID (pid) = %d\n", getpid());
+                printf("Parent Process ID (ppid) = %d\n", getppid()); 
+                printf("Process Group ID (pgid) = %d\n", getpgid(0));
                 break;
-            }
-
-                // Печатает значение ulimit
-            case 'u': {
-                struct rlimit rlp;
-                if (-1 == getrlimit(RLIMIT_FSIZE, &rlp)) {
-                    perror("failed to get ulimit\n");
-                } else {
-                    printf("ulimit value: %llu\n", rlp.rlim_max);
-                }
-                break;
-            }
-
-                // Изменяет значение ulimit
-            case 'U': {
-                long new_ulimit = strtol(optarg, NULL, 10);
-
-                if (0 == new_ulimit) {
-                    perror("invalid argument for the -U option\n");
-                    break;
-                }
-
-                struct rlimit rlp;
-                if (-1 == getrlimit(RLIMIT_FSIZE, &rlp)) {
-                    perror("failed to get the ulimit value\n");
-                    break;
-                }
-                rlp.rlim_cur = new_ulimit;
-                if (-1 == setrlimit(RLIMIT_FSIZE, &rlp)) {
-                    perror("failed to set the ulimit value\n");
-                } else {
-                    printf("the ulimit value has been set successfully\n");
+            
+            // -u  Печатает значение ulimit
+            case 'u':
+                {
+                    struct rlimit rlim;
+                    if (getrlimit(RLIMIT_NPROC, &rlim) == -1) { perror("Failed with getrlimit for FILE"); }
+                    else
+                    {
+                        printf("File size limit (ulimit):\n");
+                        printf(" Soft limit: %ld\n", (long)rlim.rlim_cur); // текущее
+                        printf(" Hard limit: %ld\n", (long)rlim.rlim_max); // максимальное
+                    }
                 }
                 break;
-            }
 
-                // Печатает размер в байтах core-файла, который может быть создан.
-            case 'c': {
-                struct rlimit rlp;
-                if (-1 == getrlimit(RLIMIT_CORE, &rlp)) {
-                    perror("failed to get the core-file cap limit\n");
-                } else {
-                    printf("core-file cap limit: %llu\n", rlp.rlim_max);
+            // -Unew_ulimit  Изменяет значение ulimit. Подсказка: смотри atol(3C) на странице руководства strtol(3C)
+            case 'U':
+                if (getrlimit(RLIMIT_FSIZE, &rlp) == 0)
+                {
+                    rlp.rlim_cur = atol(optarg); // преобразует строку аргумента в long
+                    if (setrlimit(RLIMIT_FSIZE, &rlp) == -1) { perror("Failed to change ulimit\n"); }
+                    else { printf("Ulimit changed to: %ld\n", rlp.rlim_cur); }
+                }
+                else { perror("Failed to get current ulimit\n"); }
+                break;
+
+            // -c  Печатает размер в байтах core-файла, который может быть создан.
+            case 'c':
+                {
+                    struct rlimit rlim;
+                    if (getrlimit(RLIMIT_CORE, &rlim) == 0)
+                    {
+                        // размер в байтах
+                        printf("Soft limit: %lu\n", (unsigned long)rlim.rlim_cur); // ulimit -S -c
+                        printf("Hard limit: %lu\n", (unsigned long)rlim.rlim_max); // ulimit -H -c
+                    }
+                    else { perror("Failed to get core file limit"); }
                 }
                 break;
-            }
 
-                // Изменяет размер core-файла
-            case 'C': {
-                long long new_rlim = strtoll(optarg, NULL, 10);
-
-                if (0 == new_rlim) {
-                    perror("invalid argument for the -C option\n");
-                    break;
+            // -Csize  Изменяет размер core-файла
+            case 'C':
+                if (getrlimit(RLIMIT_CORE, &rlp) == 0)
+                {
+                    rlp.rlim_cur = atol(optarg);
+                    if (setrlimit(RLIMIT_CORE, &rlp) == -1) { perror("Failed to change core file size\n"); }
+                    else
+                    {
+                        printf("New Soft limit: %lu\n", rlp.rlim_cur);
+                        printf("Hard limit: %lu\n", rlp.rlim_max);
+                    }
                 }
+                else { perror("Failed to get current core file limit\n"); }
+                break;
 
-                struct rlimit rlp;
-                if (-1 == getrlimit(RLIMIT_CORE, &rlp)) {
-                    perror("failed to get the core-file cap limit\n");
-                    break;
-                }
-                rlp.rlim_cur = new_rlim;
-                if (-1 == setrlimit(RLIMIT_CORE, &rlp)) {
-                    perror("failed to set the core-file cap limit\n");
-                } else {
-                    printf("the core-file cap limit has been set successfully\n");
+            // -d  Печатает текущую рабочую директорию
+            case 'd':
+                {
+                    char pwd[1024];
+                    if (getcwd(pwd, sizeof(pwd)) != NULL) { printf("Current wd: %s\n", pwd); }
+                    else { perror("Failed to get current directory\n"); }
                 }
                 break;
-            }
-
-                // Печатает текущую рабочую директорию
-            case 'd': {
-                char *pathname = getenv("PWD");
-
-                if (NULL == pathname) {
-                    perror("failed to get the current directory\n");
-                } else {
-                    printf("current directory: %s\n", pathname);
-                }
+                
+            // -v  Распечатывает переменные среды и их значения
+            case 'v':
+                printf("Environment variables:\n");
+                for (char** env = environ; *env != NULL; env++) { printf("  %s\n", *env); }
                 break;
-            }
 
-                // Распечатывает переменные среды и их значения
-            case 'v': {
-                char **ptr = environ;
-                for (; *ptr != NULL; ptr++) {
-                    printf("%s\n", *ptr);
-                }
+            // -Vname=value  Вносит новую переменную в среду или изменяет значение существующей переменной.
+            case 'V':
+                if (putenv(optarg) == 0) { printf("Environment variable set successfully: %s\n", optarg); }
+                else { perror("Failed to set environment variable\n"); }
                 break;
-            }
-
-                // Вносит новую переменную в среду или изменяет значение существующей переменной.
-            case 'V': {
-                if (-1 == putenv(optarg)) {
-                    printf("failed to set the environmental variable");
-                }
-                break;
-            }
-
-            case ':': {
-                printf("missing argument for option: %c\n", optopt);
-                break;
-            }
 
             case '?':
-            default:
-                printf("invalid option: %c\n", optopt);
+                fprintf(stderr, "Unknown option: %c\n", optopt);
+                break;
         }
     }
 

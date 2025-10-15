@@ -1,94 +1,77 @@
-#include <stdlib.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
 
-typedef struct {
-    off_t offset;
-    off_t length;
-} Line;
-
-typedef struct {
-    Line *array;
-    int cnt;
-    int cap;
-} Array;
-
-void initArray(Array *a) {
-    a->array = malloc(sizeof(Line));
-    a->cnt = 0;
-    a->cap = 1;
-}
-
-void insertArray(Array *a, Line element) {
-    if (a->cnt == a->cap) {
-        a->cap *= 2;
-        a->array = realloc(a->array, a->cap * sizeof(Line));
-    }
-
-    a->array[a->cnt++] = element;
-}
-
-void freeArray(Array *a) {
-    free(a->array);
-    a->array = NULL;
-    a->cnt = a->cap = 0;
-}
+#define MAX_LINES 1024
+#define MAX_LINE_LEN 1024
 
 int main(int argc, char *argv[]) {
-    if (argc != 2) { return 1; }
-    char *path = argv[1];
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <filename>\n", argv[0]);
+        return 1;
+    }
 
-    Array table;
-    initArray(&table);
+    const char *filename = argv[1];
+    int fd = open(filename, O_RDONLY);
+    if (fd == -1) {
+        perror("Failed to open file");
+        return 1;
+    }
 
-    int fd = open(path, O_RDONLY);
-    if (fd == -1) { return 1; }
-    lseek(fd, 0L, SEEK_CUR);
+    off_t offsets[MAX_LINES];
+    int lengths[MAX_LINES];
+    int line_count = 0;
+    off_t pos = 0, line_start = 0;
+    char ch;
 
-    char c;
-    off_t lineOffset = 0;
-    off_t lineLength = 0;
-    while (read(fd, &c, 1) == 1) {
-        if (c == '\n') {
-            Line current = {lineOffset, lineLength};
-            insertArray(&table, current);
-
-            lineOffset += lineLength + 1;
-            lineLength = 0;
-        } else {
-            lineLength++;
+    // Построение таблицы смещений и длин строк
+    while (read(fd, &ch, 1) == 1) {
+        pos++;
+        if (ch == '\n') {
+            offsets[line_count] = line_start;
+            lengths[line_count] = pos - line_start;
+            line_start = pos;
+            line_count++;
+            if (line_count >= MAX_LINES) break;
         }
     }
 
-    if (lineLength > 0) {
-        Line current = {lineOffset, lineLength};
-        insertArray(&table, current);
+    // Добавляем последнюю строку, если файл не оканчивается \n
+    if (pos > line_start && line_count < MAX_LINES) {
+        offsets[line_count] = line_start;
+        lengths[line_count] = pos - line_start;
+        line_count++;
     }
 
-    while (1) {
-        int num;
-        printf("Enter the line number: ");
-        scanf("%d", &num);
+    int n;
+    char linebuf[MAX_LINE_LEN];
 
-        if (num == 0) { break; }
-        if (table.cnt < num) {
-            printf("The file contains only %d line(s).\n", table.cnt);
+    while (1) {
+        printf("Enter line number (0 to exit): ");
+        if (scanf("%d", &n) != 1) break;
+        if (n == 0) break;
+
+        if (n < 1 || n > line_count) {
+            printf("Invalid line number\n");
             continue;
         }
 
-        Line line = table.array[num - 1];
-        char *buf = calloc(line.length + 1, sizeof(char));
+        off_t offset = offsets[n - 1];
+        int len = lengths[n - 1];
 
-        lseek(fd, line.offset, SEEK_SET);
-        read(fd, buf, line.length * sizeof(char));
+        lseek(fd, offset, SEEK_SET);
+        int bytes_read = read(fd, linebuf, len);
+        if (bytes_read <= 0) {
+            perror("read");
+            continue;
+        }
 
-        printf("%s\n", buf);
-        free(buf);
+        linebuf[bytes_read] = '\0';
+        printf("%s", linebuf);
+        if (linebuf[bytes_read - 1] != '\n') printf("\n");
     }
 
     close(fd);
-    freeArray(&table);
-
     return 0;
 }
