@@ -1,15 +1,15 @@
 #include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
-#include <sys/types.h>
-
-extern char *tzname[];
 
 int main()
 {
-    time_t n;
-    (void) time(&n);
-
     putenv("TZ=PST8PDT");
+    
+    time_t n;
+    time(&n);
+    
     printf("%s", ctime(&n));
+    
+    return 0;
 }
