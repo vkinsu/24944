@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    printUIDs("BEFORE setuid()");
+    UID_show("BEFORE setuid()");
     Open(argv[1]);
 
     if (setuid(getuid()) == -1) {
@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    printUIDs();
+    UID_show("AFTER");
     Open(argv[1]);
 
     return 0;
