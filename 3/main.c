@@ -2,40 +2,39 @@
 #include <stdio.h>
 #include <errno.h>
 
-void printUIDs(const char* stage) {
-    printf("%s:\n", stage);
-    printf("  Real UID: %d, Effective UID: %d\n", getuid(), geteuid());
+void UID_show(const char* st) {
+    printf("%s:\n", st);
+    printf("REAL UID: %d| EFFECTIVE UID: %d\n", getuid(), geteuid());
 }
 
-void tryToOpen(char *filename) {
-    printf("Trying to open: %s\n", filename);
-    FILE *file = fopen(filename, "r");
+void Open(char *file_a) {
+    printf("Trying to open: %s\n", file_a);
+    FILE *file = fopen(file_a, "r");
 
     if (file == NULL) {
-        perror("  fopen failed");
+        perror(" FOPEN FAILED");
         return;
     }
 
-    printf("  File opened successfully!\n");
     fclose(file);
 }
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        printf("Usage: %s <filename>\n", argv[0]);
+        printf("USAGE: %s <filename>\n", argv[0]);
         return 1;
     }
 
     printUIDs("BEFORE setuid()");
-    tryToOpen(argv[1]);
+    Open(argv[1]);
 
     if (setuid(getuid()) == -1) {
-        perror("setuid failed");
+        perror("SETUP FAILED");
         return 1;
     }
 
-    printUIDs("AFTER setuid()");
-    tryToOpen(argv[1]);
+    printUIDs();
+    Open(argv[1]);
 
     return 0;
 }
