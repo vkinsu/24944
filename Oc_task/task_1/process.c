@@ -1,3 +1,4 @@
+#define _XOPEN_SOURCE 700
 #include <sys/types.h>
 #include <sys/resource.h>
 #include <sys/time.h>
@@ -6,24 +7,43 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
+#include <string.h>
 
 #define GET_FSLIM 1
 #define SET_FSLIM 2
 
 extern char **environ;
 
-static void print_rlim(const char *label, rlim_t v)
-{
+static void print_rlim(const char *label, rlim_t v) {
     if (v == RLIM_INFINITY)
         printf("%s = unlimited\n", label);
     else
         printf("%s = %llu\n", label, (unsigned long long)v);
 }
 
-int main(int argc, char *argv[])
-{
+static void print_max_user_processes(void) {
+#ifdef RLIMIT_NPROC
+    struct rlimit rlp;
+    if (getrlimit(RLIMIT_NPROC, &rlp) == -1) {
+        perror("getrlimit(RLIMIT_NPROC)");
+    } else {
+        print_rlim("max user processes (ulimit -u)", rlp.rlim_cur);
+    }
+#else
+    /* Фолбэк для систем без RLIMIT_NPROC */
+    long v = sysconf(_SC_CHILD_MAX);
+    if (v == -1) {
+        perror("sysconf(_SC_CHILD_MAX)");
+    } else {
+        /* _SC_CHILD_MAX возвращает число процессов на пользователя */
+        printf("max user processes (ulimit -u) = %ld\n", v);
+    }
+#endif
+}
+
+int main(int argc, char *argv[]) {
     int c;
-    char options[] = "ispuU:cC:dvV:";
+    const char options[] = "ispuU:cC:dvV:";
     struct rlimit rlp;
     char **p;
 
@@ -32,7 +52,7 @@ int main(int argc, char *argv[])
         exit(0);
     }
 
-    while ((c = getopt(argc, argv, options)) != EOF) {
+    while ((c = getopt(argc, argv, options)) != -1) {
         switch (c) {
         case 'i':
             printf("real userid = %u\n", getuid());
@@ -56,15 +76,9 @@ int main(int argc, char *argv[])
                 fprintf(stderr, "Must be super-user to increase ulimit\n");
             break;
 
-        case 'u': {
-            /* Mimic `ulimit -u`: maximum number of user processes */
-            if (getrlimit(RLIMIT_NPROC, &rlp) == -1) {
-                perror("getrlimit(RLIMIT_NPROC)");
-            } else {
-                print_rlim("max user processes (ulimit -u)", rlp.rlim_cur);
-            }
+        case 'u':
+            print_max_user_processes();
             break;
-        }
 
         case 'c':
             if (getrlimit(RLIMIT_CORE, &rlp) == -1) {
@@ -104,6 +118,10 @@ int main(int argc, char *argv[])
         case 'V':
             if (putenv(optarg) != 0)
                 perror("putenv");
+            break;
+
+        default:
+            fprintf(stderr, "Unknown option: -%c\n", c);
             break;
         }
     }
