@@ -20,14 +20,15 @@ int main()
     }
 
     int line_count = 0;
-    for (int i = 0; i < bytes_read; i++) { 
-        if (buffer[i] == '\n') { 
-            line_count++; 
-        } 
+    int i;  // Объявление переменной вне цикла
+    for (i = 0; i < bytes_read; i++) {
+        if (buffer[i] == '\n') {
+            line_count++;
+        }
     }
 
-    if (bytes_read > 0 && buffer[bytes_read-1] != '\n') { 
-        line_count++; 
+    if (bytes_read > 0 && buffer[bytes_read-1] != '\n') {
+        line_count++;
     }
 
     if (line_count == 0) {
@@ -46,7 +47,7 @@ int main()
     line_positions[0] = 0;
     int index = 1;
 
-    for (int i = 0; i < bytes_read; i++)
+    for (i = 0; i < bytes_read; i++)  // Используем уже объявленную i
     {
         if (buffer[i] == '\n') 
         {
@@ -58,7 +59,8 @@ int main()
     line_positions[line_count] = bytes_read;
 
     printf("== Line number to position mapping ==\n");
-    for (int j = 0; j < line_count; j++)
+    int j;  // Объявление переменной вне цикла
+    for (j = 0; j < line_count; j++)
     {
         lseek(file_descriptor, line_positions[j], SEEK_SET);
 
