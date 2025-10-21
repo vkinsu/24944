@@ -1,12 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <linux/limits.h>
 #include <sys/resource.h>
-
-#ifndef PATH_MAX
-#define PATH_MAX 4096
-#endif
 
 extern char **environ;
 
@@ -17,8 +12,7 @@ int main(int argc, char *argv[]) {
     while ((c = getopt(argc, argv, options)) != EOF) {
         switch (c) {
             case 'i': {
-                printf("uid: %d, euid: %d, gid: %d, egid: %d\n",
-                       getuid(), geteuid(), getgid(), getegid());
+                printf("uid: %d, euid: %d, gid: %d, egid: %d\n", getuid(), geteuid(), getgid(), getegid());
                 break;
             }
 
@@ -130,7 +124,7 @@ int main(int argc, char *argv[]) {
             }
 
             case 'd': {
-                char pathname[PATH_MAX];
+                char pathname[4096];
 
                 if (getcwd(pathname, sizeof(pathname)) == NULL) {
                     perror("FAILED TO GET THE CURRENT DIRECTORY");
@@ -158,11 +152,6 @@ int main(int argc, char *argv[]) {
                 else {
                     printf("environment variable set: %s\n", optarg);
                 }
-                break;
-            }
-
-            case ':': {
-                fprintf(stderr, "missing argument for option: -%c\n", optopt);
                 break;
             }
 
