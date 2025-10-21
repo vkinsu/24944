@@ -11,6 +11,7 @@ int fd_global = -1; // Глобально для сигнала
 off_t offsets[MAX_LINES];
 int lengths[MAX_LINES];
 int line_count = 0;
+int first_input = 1; // флаг первого ввода
 
 // Обработчик сигнала SIGALRM
 void timeout_handler(int signum) {
@@ -59,7 +60,7 @@ int main(int argc, char *argv[]) {
         line_count++;
     }
 
-    // Установка обработчика сигнала и таймера
+    // Установка обработчика сигнала
     signal(SIGALRM, timeout_handler);
 
     int n;
@@ -69,9 +70,15 @@ int main(int argc, char *argv[]) {
         printf("Enter line number (0 to exit): ");
         fflush(stdout);
 
-        alarm(5); // 5 секунд на ввод
+        // таймер только для первого ввода
+        if (first_input) {
+            alarm(5); // 5 секунд на ввод
+        }
+
         if (scanf("%d", &n) != 1) break;
-        alarm(0); // отключаем таймер, если успели ввести
+
+        if (first_input) alarm(0); // отключаем таймер после первого ввода
+        first_input = 0;           // сбрасываем флаг
 
         if (n == 0) break;
 

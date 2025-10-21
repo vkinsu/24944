@@ -37,7 +37,7 @@ int main() {
     while (1) {
         int c = getchar();
 
-        if (c == 27) {
+        if (c == 27) { // Escape sequence (стрелки и др.)
             getchar();
             getchar();
             continue;
@@ -70,9 +70,9 @@ int main() {
             continue;
         }
 
-        if (isalpha(c) || c == ' ' || c == '.') {
+        if (isalnum(c) || c == ' ' || c == '.') {
             buffer[pos++] = c;
-            putchar(c); 
+            putchar(c);
             fflush(stdout);
         }
     }
@@ -86,6 +86,7 @@ int main() {
         cur = cur->next;
     }
 
+    // Освобождение памяти
     cur = head;
     while (cur) {
         Node *tmp = cur;
