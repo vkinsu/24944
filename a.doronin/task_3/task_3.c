@@ -7,8 +7,8 @@
 static void print_ids(const char *tag)
 {
     printf("%s\n", tag);
-    printf(" real uid: %d, effective uid: %d\n", (int)getuid(), (int)geteuid());
-    printf(" real gid: %d, effective gid: %d\n", (int)getgid(), (int)getegid());
+    printf("real uid: %d, effective uid: %d\n", (int)getuid(), (int)geteuid());
+    printf("real gid: %d, effective gid: %d\n", (int)getgid(), (int)getegid());
 }
 
 static void try_open(const char *path)
