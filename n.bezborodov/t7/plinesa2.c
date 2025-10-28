@@ -1,8 +1,10 @@
-/* pickline_mmap.c — выбор и печать строки из текстового файла через mmap.
-   - Строит индекс (off,len) по '\n', сканируя mmapped-память.
-   - На ввод номера строки отводится 5 секунд (select на stdin).
-   - При таймауте печатает весь файл построчно и выходит.
+/* pickline.c — печать выбранной строки из текстового файла
+   Построение индекса (offset/len) по '\n' с использованием mmap().
+   Ввод номера строки с клавиатуры; 0 — выход.
+   Построение таблицы смещений и длин строк для каждой строки файла.
+   Таймаут на ввод — 5 секунд для первого ввода.
 */
+
 #define _XOPEN_SOURCE 600
 #define _FILE_OFFSET_BITS 64
 
@@ -13,18 +15,27 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/mman.h>
-#include <sys/select.h>
 #include <errno.h>
-
-typedef struct { off_t off; size_t len; } Line;
+#include <signal.h>
+#include <sys/mman.h>
 
 typedef struct {
-    Line  *a;
-    size_t n, cap;
+    off_t off;   /* смещение начала строки от начала файла */
+    size_t len;  /* длина строки БЕЗ символа '\n' */
+} Line;
+
+typedef struct {
+    Line *a;
+    size_t n;
+    size_t cap;
 } LineVec;
 
-static void die(const char *msg) { perror(msg); exit(1); }
+static void die(const char *msg) {
+    perror(msg);
+    exit(1);
+}
+
+static void lv_init(LineVec *v) { v->a = NULL; v->n = v->cap = 0; }
 
 static void lv_push(LineVec *v, off_t off, size_t len) {
     if (v->n == v->cap) {
@@ -38,18 +49,35 @@ static void lv_push(LineVec *v, off_t off, size_t len) {
     v->n++;
 }
 
-/* Печать строки из mmapped-буфера (добавляем \n сами). */
-static void print_line(const char *base, const Line *L) {
-    /* Уберём возможный CR перед LF (Windows CRLF), чтобы вывод был “чистым” */
-    size_t n = L->len;
-    if (n && base[L->off + n - 1] == '\r') n--;
-    (void)fwrite(base + L->off, 1, n, stdout);
-    fputc('\n', stdout);
-}
+// Переменная для отслеживания, был ли сделан первый выбор
+static int first_choice = 1;
 
-/* Печать всего файла построчно по индексу. */
-static void print_all(const char *base, const LineVec *idx) {
-    for (size_t i = 0; i < idx->n; ++i) print_line(base, &idx->a[i]);
+// Имя файла, переданное в командной строке
+static const char *path;
+
+// Функция обработчик для alarm (тайм-аут)
+void handle_alarm(int sig) {
+    if (first_choice) {
+        printf("\nВремя истекло! Печатаем весь файл:\n");
+
+        // Печатаем весь файл
+        int fd = open(path, O_RDONLY);  // Используем переменную path
+        if (fd < 0) die("open");
+
+        struct stat st;
+        if (fstat(fd, &st) < 0) die("fstat");
+
+        char *mapped = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+        if (mapped == MAP_FAILED) die("mmap");
+
+        fwrite(mapped, 1, st.st_size, stdout); // Выводим содержимое файла
+
+        munmap(mapped, st.st_size);
+        close(fd);
+
+        // Завершаем программу
+        exit(0);
+    }
 }
 
 int main(int argc, char **argv) {
@@ -57,77 +85,94 @@ int main(int argc, char **argv) {
         printf("Использование: %s <файл>\n", argv[0]);
         return 2;
     }
-    const char *path = argv[1];
 
-    /* 1) Открыть и отобразить файл */
+    path = argv[1];  // Сохраняем имя файла в глобальной переменной
+    
     int fd = open(path, O_RDONLY);
     if (fd < 0) die("open");
 
     struct stat st;
     if (fstat(fd, &st) < 0) die("fstat");
 
-    off_t fsz = st.st_size;
-    if (fsz == 0) {  /* пустой файл */
-        printf("Файл пуст.\n");
-        close(fd);
-        return 0;
-    }
+    // Отображаем файл в память
+    char *mapped = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (mapped == MAP_FAILED) die("mmap");
 
-    void *map = mmap(NULL, (size_t)fsz, PROT_READ, MAP_SHARED, fd, 0);
-    if (map == MAP_FAILED) die("mmap");
-    const char *base = (const char*)map;
+    LineVec idx; lv_init(&idx);
 
-    /* 2) Построить индекс (off,len) по '\n' */
-    LineVec idx = {0};
-    off_t line_start = 0;
-    for (off_t i = 0; i < fsz; ++i) {
-        if (base[i] == '\n') {
-            off_t line_end = i;                    /* позиция LF */
-            size_t len = (size_t)(line_end - line_start); /* без LF */
+    /* Однопроходное построение индекса */
+    off_t file_pos = 0;        /* позиция начала буфера в файле */
+    off_t line_start = 0;      /* смещение начала текущей (набираемой) строки */
+    for (off_t i = 0; i < st.st_size; ++i) {
+        if (mapped[i] == '\n') {
+            off_t line_end_off = file_pos + i;               /* позиция '\n' */
+            size_t len = (size_t)(line_end_off - line_start);/* без '\n' */
             lv_push(&idx, line_start, len);
-            line_start = i + 1;
+            line_start = line_end_off + 1;                   /* следом после '\n' */
         }
     }
-    /* Хвост без завершающего LF */
-    if (line_start < fsz) {
-        size_t len = (size_t)(fsz - line_start);
+
+    /* Если файл не заканчивается '\n', добавим последнюю строку */
+    if (line_start < st.st_size) {
+        size_t len = (size_t)(st.st_size - line_start);
         lv_push(&idx, line_start, len);
     }
 
-    /* 3) Цикл запросов с таймаутом 5 сек */
-    char inbuf[128];
+    /* Выводим таблицу смещений и длин строк для каждой строки */
+    printf("Таблица строк (всего %zu):\n", idx.n);
+    for (size_t i = 0; i < idx.n; ++i) {
+        printf("  %6zu: off=%lld len=%zu\n", i + 1, (long long)idx.a[i].off, idx.a[i].len);
+    }
+
+    // Регистрация обработчика сигнала для alarm
+    signal(SIGALRM, handle_alarm);
+
+    /* Таймаут на первый ввод (5 секунд) */
     for (;;) {
-        printf("Введите номер строки (0 — выход, 1..%zu) [5 секунд]: ", idx.n);
-        fflush(stdout);
+        if (first_choice) {
+            // Сообщение о 5 секундах на первый ввод
+            printf("\nУ вас есть 5 секунд. ");
+        }
+        printf("Введите номер строки (0 — выход, 1..%zu): ", idx.n);
 
-        fd_set rfds; FD_ZERO(&rfds); FD_SET(STDIN_FILENO, &rfds);
-        struct timeval tv = { .tv_sec = 5, .tv_usec = 0 };
-        int sel = select(STDIN_FILENO + 1, &rfds, NULL, NULL, &tv);
-
-        if (sel == 0) {
-            printf("\nТаймаут. Печатаю всё содержимое файла:\n");
-            print_all(base, &idx);
-            break;
-        } else if (sel < 0) {
-            if (errno == EINTR) continue;
-            die("select");
+        // Устанавливаем таймер на 5 секунд для первого ввода
+        if (first_choice) {
+            alarm(5);  // Таймер 5 секунд
         }
 
+        char inbuf[128];
         if (!fgets(inbuf, sizeof(inbuf), stdin)) break;
+
+        // Останавливаем alarm, если пользователь успел ввести
+        if (first_choice) {
+            first_choice = 0; // После первого ввода таймер больше не нужен
+            alarm(0);         // Отключаем таймер
+        }
+
+        // Проверяем ввод на корректность
         char *endp = NULL;
         long n = strtol(inbuf, &endp, 10);
+
+        // Проверка, что весь ввод был числом и нет неверных символов
+        if (*endp != '\0' && *endp != '\n') {
+            printf("Ошибка: введены неверные символы. Пожалуйста, введите корректное число.\n");
+            continue;
+        }
+
         if (n == 0) break;
         if (n < 0 || (size_t)n > idx.n) {
             printf("Нет такой строки. В файле %zu строк(и).\n", idx.n);
             continue;
         }
-        print_line(base, &idx.a[n - 1]);
-        /* и снова ждём 5 секунд следующего ввода */
+
+        Line L = idx.a[n - 1];
+
+        /* Печатаем строку, используя отображение файла в память */
+        printf("%.*s\n", (int)L.len, mapped + L.off);  // Выводим строку из памяти
     }
 
-    /* 4) Чистка */
-    free(idx.a);
-    munmap((void*)base, (size_t)fsz);
+    // Освобождаем отображение памяти и закрываем файл
+    munmap(mapped, st.st_size);
     close(fd);
     return 0;
 }

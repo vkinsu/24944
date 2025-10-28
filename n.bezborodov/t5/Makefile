@@ -1,3 +1,4 @@
 all:
-	gcc rw.c -o rw
-	./rw
+	gcc plines.c -o plines
+	./plines my.txt
+
