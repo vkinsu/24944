@@ -1,8 +1,9 @@
 /* pickline.c — печать выбранной строки из текстового файла
    Построение индекса (offset/len) по '\n' с использованием open/read/lseek.
    Ввод номера строки с клавиатуры; 0 — выход.
-   Опция командной строки -t выводит таблицу смещений/длин (для отладки).
+   Построение таблицы смещений и длин строк для каждой строки файла.
 */
+
 #define _XOPEN_SOURCE 600
 #define _FILE_OFFSET_BITS 64
 
@@ -16,12 +17,12 @@
 #include <errno.h>
 
 typedef struct {
-    off_t  off;   /* смещение начала строки от начала файла */
-    size_t len;   /* длина строки БЕЗ символа '\n' */
+    off_t off;   /* смещение начала строки от начала файла */
+    size_t len;  /* длина строки БЕЗ символа '\n' */
 } Line;
 
 typedef struct {
-    Line  *a;
+    Line *a;
     size_t n;
     size_t cap;
 } LineVec;
@@ -47,19 +48,12 @@ static void lv_push(LineVec *v, off_t off, size_t len) {
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        printf("Использование: %s [-t] <файл>\n", argv[0]);
+        printf("Использование: %s <файл>\n", argv[0]);
         return 2;
     }
 
-    int show_table = 0;
-    const char *path = NULL;
-    if (argc == 3 && strcmp(argv[1], "-t") == 0) {
-        show_table = 1;
-        path = argv[2];
-    } else {
-        path = argv[1];
-    }
-
+    const char *path = argv[1];
+    
     int fd = open(path, O_RDONLY);
     if (fd < 0) die("open");
 
@@ -93,12 +87,10 @@ int main(int argc, char **argv) {
         lv_push(&idx, line_start, len);
     }
 
-    if (show_table) {
-        printf("Таблица строк (всего %zu):\n", idx.n);
-        for (size_t i = 0; i < idx.n; ++i) {
-            printf("  %6zu: off=%lld len=%zu\n",
-                   i + 1, (long long)idx.a[i].off, idx.a[i].len);
-        }
+    /* Выводим таблицу смещений и длин строк для каждой строки */
+    printf("Таблица строк (всего %zu):\n", idx.n);
+    for (size_t i = 0; i < idx.n; ++i) {
+        printf("  %6zu: off=%lld len=%zu\n", i + 1, (long long)idx.a[i].off, idx.a[i].len);
     }
 
     /* Цикл запросов */
@@ -107,8 +99,16 @@ int main(int argc, char **argv) {
         printf("Введите номер строки (0 — выход, 1..%zu): ", idx.n);
         if (!fgets(inbuf, sizeof(inbuf), stdin)) break;
 
+        // Проверяем ввод на корректность
         char *endp = NULL;
         long n = strtol(inbuf, &endp, 10);
+
+        // Проверка, что весь ввод был числом и нет неверных символов
+        if (*endp != '\0' && *endp != '\n') {
+            printf("Ошибка: введены неверные символы. Пожалуйста, введите корректное число.\n");
+            continue;
+        }
+
         if (n == 0) break;
         if (n < 0 || (size_t)n > idx.n) {
             printf("Нет такой строки. В файле %zu строк(и).\n", idx.n);
